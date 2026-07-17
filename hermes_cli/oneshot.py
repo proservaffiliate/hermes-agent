@@ -221,6 +221,12 @@ def run_oneshot(
         real_stdout.flush()
 
     if (result.get("failed") or result.get("partial")) and not (response or "").strip():
+        detail = str(result.get("error") or "").strip()
+        if detail:
+            real_stderr.write(f"hermes -z: agent run failed: {detail}\n")
+        else:
+            real_stderr.write("hermes -z: agent run failed with no further detail.\n")
+        real_stderr.flush()
         return 2
 
     if not (response or "").strip():
