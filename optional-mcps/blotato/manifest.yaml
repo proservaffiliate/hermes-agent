@@ -1,0 +1,39 @@
+# Nous-approved MCP catalog entry.
+# Presence in this directory = approval. Merged via PR review.
+manifest_version: 1
+
+name: blotato
+description: Create, schedule, and analyse social media posts across platforms via Blotato.
+source: https://help.blotato.com/api/mcp
+
+# Blotato ships a remote MCP server over Streamable HTTP.
+# Auth is a custom request header: blotato-api-key.
+transport:
+  type: http
+  url: https://mcp.blotato.com/mcp
+
+auth:
+  type: api_key
+  env:
+    - name: BLOTATO_API_KEY
+      prompt: "Blotato API key (Settings → API in the Blotato dashboard)"
+      required: true
+      secret: true
+      # Sent as the HTTP header "blotato-api-key" on every MCP request.
+      header: "blotato-api-key"
+
+# Tool selection at install time:
+# Blotato's server exposes tools across social posting, scheduling, analytics,
+# inbox/DMs, comments, and asset uploads. Leave default_enabled unset so the
+# install-time checklist starts with everything pre-checked — users prune
+# what they don't need (e.g. blotato_delete_schedule if they want read-only).
+
+post_install: |
+  Get your API key from Settings → API in the Blotato dashboard.
+  Copy the full key including any trailing = (base64 padding) — a truncated
+  key causes a 401 "invalid API key" error.
+
+  Start a new Hermes session to load the Blotato tools.
+
+  Re-run the tool checklist any time with:
+    hermes mcp configure blotato

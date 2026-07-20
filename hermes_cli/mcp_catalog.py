@@ -58,6 +58,10 @@ class EnvVarSpec:
     required: bool = True
     secret: bool = True
     default: str = ""
+    # If set, the install flow wires this env var as an HTTP request header
+    # with this name (e.g. "blotato-api-key"). Only meaningful for HTTP
+    # transport entries with auth.type == "api_key".
+    header: Optional[str] = None
 
 
 @dataclass
@@ -138,12 +142,14 @@ def _parse_env_spec(raw: Any) -> EnvVarSpec:
     name = raw.get("name") or ""
     if not name or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", name):
         raise CatalogError(f"invalid env var name: {name!r}")
+    raw_header = raw.get("header")
     return EnvVarSpec(
         name=name,
         prompt=raw.get("prompt") or name,
         required=bool(raw.get("required", True)),
         secret=bool(raw.get("secret", True)),
         default=str(raw.get("default") or ""),
+        header=str(raw_header).strip() if raw_header else None,
     )
 
 
@@ -472,6 +478,17 @@ def _build_server_config(
         cfg["url"] = t.url
         if entry.auth.type == "oauth":
             cfg["auth"] = "oauth"
+        elif entry.auth.type == "api_key":
+            # Build the headers dict from any env specs that declare a header
+            # name (e.g. "blotato-api-key"). Values use ${VAR} placeholders so
+            # _interpolate_env_vars() resolves them at connection time.
+            headers = {
+                spec.header: f"${{{spec.name}}}"
+                for spec in entry.auth.env
+                if spec.header
+            }
+            if headers:
+                cfg["headers"] = headers
     return cfg
 
 
