@@ -158,6 +158,58 @@ terminal(command="sleep 15 && tmux capture-pane -t claude-work -p -S -60")
 | `claude plugin` / `claude plugins` | 管理 Claude Code 插件 |
 | `claude auto-mode` | 检查自动模式分类器配置 |
 
+## 远程控制
+
+`claude remote-control` 启动一个本地 WebSocket 服务器，让 claude.ai 网页界面或 Claude 移动应用与正在运行的 Claude Code 会话配对并控制它。配对后，你可以从浏览器或手机发送提示词、中断执行、查看输出——无需坐在终端前。当 Claude Code 运行在远程服务器或你不在身边的设备上时，这非常有用。
+
+### 启动远程控制
+
+```
+terminal(command="claude remote-control", workdir="/path/to/project", timeout=3600)
+```
+
+启动时 Claude Code 会打印一次性配对 URL：
+
+```
+Remote control server listening on ws://localhost:62425
+Open in your browser to connect:
+  https://claude.ai/remote?token=<token>
+```
+
+在浏览器中访问该 URL，或在移动应用中使用它。配对后，会话将响应来自远程界面的提示词。
+
+**关键行为：**
+- 服务器绑定到 `localhost`——不暴露到网络。
+- 配对 token 仅限一次使用；重新连接会生成新的 URL。
+- `claude remote-control` 启动一个全新的交互式会话。若要将已运行的交互式会话移交给远程控制，在同一项目目录下另开终端运行 `claude remote-control`——它会附加到活跃会话。
+
+### Hermes 编排模式
+
+当用户要求"用远程控制启动 Claude"或"让我从手机控制 Claude"时：
+
+```python
+# 第 1 步——在 tmux 中启动带远程控制的 Claude Code
+terminal(command="tmux new-session -d -s claude-rc -x 200 -y 50")
+terminal(command="tmux send-keys -t claude-rc 'cd /path/to/project && claude remote-control' Enter")
+
+# 第 2 步——等待服务器打印配对 URL（约需 3 秒）
+terminal(command="sleep 4 && tmux capture-pane -t claude-rc -p -S -30")
+# → 找到 https://claude.ai/remote?token=... 这一行，提取并报告给用户
+
+# 第 3 步——在用户远程工作期间保持会话存活
+# 随时检查进度：
+terminal(command="tmux capture-pane -t claude-rc -p -S -15")
+
+# 第 4 步——用户完成后清理
+terminal(command="tmux kill-session -t claude-rc")
+```
+
+**规则：**
+- **务必捕获并报告配对 URL**——用户没有它就无法连接。从 `tmux capture-pane` 输出中解析 `https://claude.ai/remote?token=` 行。
+- **使用较长的 `timeout`**（3600 秒或更长）——远程会话可能持续数小时。
+- **用户远程连接期间切勿终止 tmux 会话**。
+- 如果 5 秒后 `tmux capture-pane` 没有显示 URL，再等 3 秒重试，然后再报告错误。
+
 ## Print 模式深度解析
 
 ### 结构化 JSON 输出

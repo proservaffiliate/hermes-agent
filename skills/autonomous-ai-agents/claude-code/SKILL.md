@@ -140,6 +140,58 @@ terminal(command="sleep 15 && tmux capture-pane -t claude-work -p -S -60")
 | `claude plugin` / `claude plugins` | Manage Claude Code plugins |
 | `claude auto-mode` | Inspect auto mode classifier configuration |
 
+## Remote Control
+
+`claude remote-control` starts a local WebSocket server that lets the claude.ai web interface or the Claude mobile app pair with and drive the running Claude Code session. Once connected, you can send prompts, interrupt execution, and view output from a browser or phone — without sitting at the terminal. This is useful when Claude Code is running on a remote server or a machine you aren't physically at.
+
+### Starting remote control
+
+```
+terminal(command="claude remote-control", workdir="/path/to/project", timeout=3600)
+```
+
+On startup Claude Code prints a one-time pairing URL:
+
+```
+Remote control server listening on ws://localhost:62425
+Open in your browser to connect:
+  https://claude.ai/remote?token=<token>
+```
+
+Visit that URL in a browser or share it with the mobile app. Once paired, the session responds to prompts from the remote interface.
+
+**Key behaviors:**
+- The server binds to `localhost` — it is not exposed to the network.
+- The pairing token is single-use; reconnecting generates a new URL.
+- `claude remote-control` starts a fresh interactive session. To hand off an already-running interactive session to remote control, run `claude remote-control` in a separate terminal in the same project directory — it attaches to the active session.
+
+### Hermes orchestration pattern
+
+When the user asks to "start Claude with remote control" or "let me drive Claude from my phone":
+
+```python
+# Step 1 — launch Claude Code with remote control inside tmux
+terminal(command="tmux new-session -d -s claude-rc -x 200 -y 50")
+terminal(command="tmux send-keys -t claude-rc 'cd /path/to/project && claude remote-control' Enter")
+
+# Step 2 — wait for the server to print the pairing URL (takes ~3 s)
+terminal(command="sleep 4 && tmux capture-pane -t claude-rc -p -S -30")
+# → Find the https://claude.ai/remote?token=... line; extract and report it to the user
+
+# Step 3 — keep the session alive while the user works remotely
+# Check progress any time:
+terminal(command="tmux capture-pane -t claude-rc -p -S -15")
+
+# Step 4 — clean up when the user is done
+terminal(command="tmux kill-session -t claude-rc")
+```
+
+**Rules:**
+- **Always capture and report the pairing URL** — the user cannot connect without it. Parse `tmux capture-pane` output for the `https://claude.ai/remote?token=` line.
+- **Use a long `timeout`** (3600 s or more) — remote sessions can last hours.
+- **Do NOT kill the tmux session** while the user is connected remotely.
+- If `tmux capture-pane` shows no URL after 5 s, wait another 3 s and retry before reporting an error.
+
 ## Print Mode Deep Dive
 
 ### Structured JSON Output
