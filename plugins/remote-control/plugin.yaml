@@ -1,0 +1,7 @@
+name: remote-control
+version: 1.0.0
+description: "Start a local WebSocket server so the Hermes session can be driven from claude.ai, a browser, or any WebSocket client. Prints a pairing URL on session start."
+author: "NousResearch"
+hooks:
+  - on_session_start
+  - on_session_end
