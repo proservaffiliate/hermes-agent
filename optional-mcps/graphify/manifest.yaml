@@ -1,0 +1,86 @@
+# Nous-approved MCP catalog entry.
+# Presence in this directory = approval. Merged via PR review.
+#
+# Schema version 1.
+manifest_version: 1
+
+name: graphify
+description: >
+  Turn any codebase, document set, or media folder into a queryable knowledge
+  graph (god nodes, community detection, BFS/DFS query, shortest-path). Exposes
+  graphify's full graph API — query, path, explain, affected, god-nodes — as MCP
+  tools so Hermes can answer architecture questions from a persistent graph
+  without re-reading every file on each turn.
+source: https://github.com/safishamsi/graphify
+
+# graphify ships an MCP stdio server via `graphify <path> --mcp`.
+# The server reads (or builds) graphify-out/graph.json in <path> and exposes
+# graph traversal tools over the MCP stdio protocol.
+#
+# GRAPHIFY_PATH is substituted at install time with the directory the user
+# wants to graph. It can be changed later by editing the mcp_servers.graphify
+# entry in ~/.hermes/config.yaml.
+transport:
+  type: stdio
+  command: graphify
+  args:
+    - "${GRAPHIFY_PATH}"
+    - "--mcp"
+
+# graphify is installed as a standalone CLI via pip/uvx; there is no repo to
+# clone. The bootstrap step installs the `graphifyy` package (pip package name
+# differs from the CLI command, which is `graphify`).
+install:
+  type: bootstrap
+  bootstrap:
+    - "pip install --upgrade graphifyy"
+
+# No API key needed for the MCP server itself. The underlying LLM calls
+# (extraction, community labelling) use whatever key the user already has set
+# in their environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.).
+auth:
+  type: none
+
+# Prompt for the target directory at install time so the transport arg is
+# substituted correctly. The user can re-configure with:
+#   hermes mcp configure graphify
+config_prompts:
+  - name: GRAPHIFY_PATH
+    prompt: "Path to the codebase you want to graph (e.g. /home/user/myproject or .)"
+    default: "."
+    required: true
+    secret: false
+
+# Tool selection at install time.
+# graph_query / graph_path / graph_explain are the read-only traversal tools
+# (safe by default). extract and update trigger LLM-backed re-extraction
+# (mutating — opt-in).
+tools:
+  default_enabled:
+    - graph_query
+    - graph_path
+    - graph_explain
+    - graph_god_nodes
+    - graph_affected
+  default_disabled:
+    - graph_extract
+    - graph_update
+    - graph_cluster
+
+post_install: |
+  graphify's MCP server reads from graphify-out/graph.json in the directory you
+  configured. If no graph exists yet, build one first:
+
+    graphify ${GRAPHIFY_PATH}
+
+  (This is a one-time step; subsequent runs use --update for incremental
+  re-extraction on changed files only.)
+
+  The MCP server then exposes graph traversal tools (query, path, explain,
+  god-nodes, affected) so Hermes can answer architecture questions without
+  re-reading raw source files each turn.
+
+  To graph a different directory, reconfigure with:
+    hermes mcp configure graphify
+
+  Start a new Hermes session to load the graphify tools.
