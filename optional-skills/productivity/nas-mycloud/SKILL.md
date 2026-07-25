@@ -61,7 +61,12 @@ python scripts/nas_mycloud.py check-drives --drives U W X Y Z
 # Test read/write on a specific drive
 python scripts/nas_mycloud.py test-rw --path U:\
 
-# Map a network drive (Windows only, requires admin)
+# Fix specific broken drives in one step (Windows only)
+python scripts/nas_mycloud.py fix-drives --drives U Y Z \
+    --host 192.168.1.100 \
+    --shares U=backup Y=media Z=docs
+
+# Map a single network drive (Windows only, requires admin)
 python scripts/nas_mycloud.py map-drive --letter U --unc "\\192.168.1.100\share_name"
 
 # Ping NAS and list SMB shares (cross-platform)
@@ -74,7 +79,8 @@ python scripts/nas_mycloud.py discover --host 192.168.1.100
 |------|-----------------|
 | Check drives exist | `nas_mycloud.py check-drives --drives U W X Y Z` |
 | Test read/write | `nas_mycloud.py test-rw --path <drive_letter>:\` |
-| Map missing drive | `nas_mycloud.py map-drive --letter <L> --unc <\\IP\share>` |
+| Fix specific broken drives | `nas_mycloud.py fix-drives --drives U Y Z --host <IP> --shares U=share1 Y=share2 Z=share3` |
+| Map a single drive | `nas_mycloud.py map-drive --letter <L> --unc <\\IP\share>` |
 | Discover NAS shares | `nas_mycloud.py discover --host <NAS_IP>` |
 | Web portal | `https://os5.mycloud.com/` |
 
@@ -121,16 +127,33 @@ The script creates a small probe file, reads it back, and deletes it. Output:
 
 ### Step 4 — Fix missing or unreachable drives
 
-For a `MISSING` drive, map it:
+Use `fix-drives` to repair one or more drives in a single command. It
+disconnects any stale mapping, remaps from the NAS, and runs a read/write
+check — all automatically:
 
 ```bash
-# Windows only — requires the drive letter, UNC path, and optional credentials
+# Fix drives U:, Y:, Z: in one pass
+python scripts/nas_mycloud.py fix-drives \
+    --drives U Y Z \
+    --host 192.168.8.100 \
+    --shares U=backup Y=media Z=docs
+```
+
+Add `--user <username> --password <password>` if the NAS requires credentials.
+
+Each drive in the JSON output shows:
+- `status_before` — what was wrong before the fix
+- `fixed: true` — whether a remap was attempted
+- `rw_check` — `READ+WRITE OK` if the drive is now healthy
+
+For a single drive, `map-drive` can also be used directly:
+
+```bash
 python scripts/nas_mycloud.py map-drive --letter X --unc "\\192.168.8.100\media"
 ```
 
-For `UNREACHABLE`, check credentials:
-1. Open File Explorer → right-click the drive → Disconnect
-2. Re-map using `map-drive` with `--user <username> --password <password>`
+If `fix-drives` fails with `mapping failed`, verify the share name with
+`discover --host <IP>` first, then retry with the correct share name.
 
 ### Step 5 — MyCloud web interface
 

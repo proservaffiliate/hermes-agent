@@ -6,6 +6,7 @@ Usage:
     python nas_mycloud.py check-drives --drives U W X Y Z
     python nas_mycloud.py test-rw --path U:\
     python nas_mycloud.py map-drive --letter X --unc "\\192.168.1.100\share"
+    python nas_mycloud.py fix-drives --drives U Y Z --host 192.168.1.100 --shares U=share1 Y=share2 Z=share3
     python nas_mycloud.py discover --host 192.168.1.100
     python nas_mycloud.py open-portal
 """
@@ -180,6 +181,96 @@ def discover(host: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# fix-drives  (Windows only)
+# ---------------------------------------------------------------------------
+
+def _unmap_drive(letter: str) -> dict:
+    """Disconnect a drive letter, ignoring 'not connected' errors."""
+    letter = letter.rstrip(":\\").upper()
+    try:
+        result = subprocess.run(
+            ["net", "use", f"{letter}:", "/delete", "/yes"],
+            capture_output=True, text=True, timeout=15,
+        )
+        # returncode 2 = drive was not connected — treat as OK
+        if result.returncode in (0, 2):
+            return {"unmapped": True}
+        return {"unmapped": False, "reason": (result.stderr or result.stdout).strip()}
+    except subprocess.TimeoutExpired:
+        return {"unmapped": False, "reason": "net use /delete timed out"}
+    except FileNotFoundError:
+        return {"unmapped": False, "reason": "'net' not found — must run on Windows"}
+
+
+def fix_drives(
+    drives: list[str],
+    host: str,
+    share_map: dict[str, str],
+    user: str = None,
+    password: str = None,
+) -> dict:
+    """
+    For each drive letter:
+      1. Check current status.
+      2. If MISSING or UNREACHABLE: unmap (if stale) then remap.
+      3. Verify read/write after remapping.
+    """
+    if not _is_windows():
+        return {
+            "status": "ERROR",
+            "reason": "fix-drives is Windows-only; on Linux/macOS use mount.cifs",
+        }
+
+    results = {}
+    for letter in drives:
+        drv = letter.rstrip(":\\").upper()
+        root = Path(f"{drv}:\\")
+
+        # 1 — current state
+        status_before = check_drives([drv])[drv]["status"]
+
+        # 2 — remediate if not healthy
+        if status_before != "OK":
+            unmap_result = _unmap_drive(drv)
+
+            share = share_map.get(drv) or share_map.get(drv.lower())
+            if not share:
+                results[drv] = {
+                    "status_before": status_before,
+                    "fixed": False,
+                    "reason": f"no share name provided for {drv}: — pass {drv}=<share> in --shares",
+                }
+                continue
+
+            unc = f"\\\\{host}\\{share}"
+            map_result = map_drive(drv, unc, user=user, password=password)
+
+            if map_result["status"] != "MAPPED":
+                results[drv] = {
+                    "status_before": status_before,
+                    "fixed": False,
+                    "unc": unc,
+                    "reason": map_result.get("reason", "mapping failed"),
+                }
+                continue
+        else:
+            unmap_result = None
+            map_result = None
+
+        # 3 — verify read/write
+        rw = test_rw(str(root))
+        results[drv] = {
+            "status_before": status_before,
+            "fixed": status_before != "OK",
+            "rw_check": rw["status"],
+        }
+        if map_result:
+            results[drv]["unc"] = map_result.get("unc", "")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # open-portal
 # ---------------------------------------------------------------------------
 
@@ -216,6 +307,20 @@ def main(argv: list[str] = None) -> int:
     p_map.add_argument("--user", help="SMB username (optional)")
     p_map.add_argument("--password", help="SMB password (optional)")
 
+    p_fix = sub.add_parser(
+        "fix-drives",
+        help="Unmap stale drives, remap from NAS, and verify read/write (Windows only)",
+    )
+    p_fix.add_argument("--drives", nargs="+", required=True, metavar="LETTER",
+                       help="Drive letters to fix (e.g. U Y Z)")
+    p_fix.add_argument("--host", required=True, help="NAS IP or hostname")
+    p_fix.add_argument(
+        "--shares", nargs="+", required=True, metavar="LETTER=SHARE",
+        help="Drive-to-share mapping (e.g. U=backup Y=media Z=docs)",
+    )
+    p_fix.add_argument("--user", help="SMB username (optional)")
+    p_fix.add_argument("--password", help="SMB password (optional)")
+
     p_disc = sub.add_parser("discover", help="Ping NAS and probe SMB port / shares")
     p_disc.add_argument("--host", required=True, help="NAS IP or hostname")
 
@@ -231,6 +336,20 @@ def main(argv: list[str] = None) -> int:
         _print(map_drive(args.letter, args.unc,
                          user=getattr(args, "user", None),
                          password=getattr(args, "password", None)))
+    elif args.cmd == "fix-drives":
+        share_map = {}
+        for entry in args.shares:
+            if "=" not in entry:
+                print(f"ERROR: --shares entries must be LETTER=share_name, got: {entry!r}",
+                      file=sys.stderr)
+                return 1
+            k, v = entry.split("=", 1)
+            share_map[k.upper()] = v
+        _print(fix_drives(
+            args.drives, args.host, share_map,
+            user=getattr(args, "user", None),
+            password=getattr(args, "password", None),
+        ))
     elif args.cmd == "discover":
         _print(discover(args.host))
     elif args.cmd == "open-portal":
