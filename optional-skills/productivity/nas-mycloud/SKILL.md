@@ -28,6 +28,8 @@ practical setup steps users need to get drives accessible and confirm they work.
 - "Configure NAS share permissions for my account"
 - "Enable remote access on MyCloud"
 - "Map a network drive to my NAS"
+- "MyCloud web portal only shows some of my folders / missing folders"
+- "Enable Cloud Access on all shares so they appear on os5.mycloud.com"
 
 ## Prerequisites
 
@@ -69,7 +71,10 @@ python scripts/nas_mycloud.py fix-drives --drives U Y Z \
 # Map a single network drive (Windows only, requires admin)
 python scripts/nas_mycloud.py map-drive --letter U --unc "\\192.168.1.100\share_name"
 
-# Ping NAS and list SMB shares (cross-platform)
+# List all shares on the NAS + which drive letters are mapped to each
+python scripts/nas_mycloud.py list-shares --host 192.168.1.100
+
+# Ping NAS and probe SMB port (cross-platform)
 python scripts/nas_mycloud.py discover --host 192.168.1.100
 ```
 
@@ -80,6 +85,7 @@ python scripts/nas_mycloud.py discover --host 192.168.1.100
 | Check drives exist | `nas_mycloud.py check-drives --drives U W X Y Z` |
 | Test read/write | `nas_mycloud.py test-rw --path <drive_letter>:\` |
 | Fix specific broken drives | `nas_mycloud.py fix-drives --drives U Y Z --host <IP> --shares U=share1 Y=share2 Z=share3` |
+| List all NAS shares + drive mapping | `nas_mycloud.py list-shares --host <NAS_IP>` |
 | Map a single drive | `nas_mycloud.py map-drive --letter <L> --unc <\\IP\share>` |
 | Discover NAS shares | `nas_mycloud.py discover --host <NAS_IP>` |
 | Web portal | `https://os5.mycloud.com/` |
@@ -155,13 +161,31 @@ python scripts/nas_mycloud.py map-drive --letter X --unc "\\192.168.8.100\media"
 If `fix-drives` fails with `mapping failed`, verify the share name with
 `discover --host <IP>` first, then retry with the correct share name.
 
-### Step 5 — MyCloud web interface
+### Step 5 — MyCloud web interface — show all folders
 
-1. Open `https://os5.mycloud.com/` in a browser and sign in.
-2. Navigate to **Settings → Shares**. For each share, confirm your account
-   has **Read/Write** access.
-3. To add another user: **Settings → Users → Invite** and set the share
-   permission level.
+The portal at `https://os5.mycloud.com/` only displays shares that have
+**Cloud Access enabled**. If you see fewer folders than expected, shares are
+either private or Cloud Access is off for them.
+
+**To enable Cloud Access on all shares and make every folder visible:**
+
+1. Sign in to `https://os5.mycloud.com/`
+2. Go to **Settings → Shares** (or **Storage → Shares** on older firmware)
+3. For each share listed:
+   - Click the share name to open its settings
+   - Toggle **Cloud Access** → **On**
+   - Set your user account's access level to **Read/Write** if not already
+   - Click **Save / Apply**
+4. Refresh the file browser — every share with Cloud Access on should now
+   appear as a top-level folder
+
+**If a share still does not appear after enabling Cloud Access:**
+- Confirm the share is **not empty** (empty shares are hidden in the browser)
+- Check **Settings → Users** and confirm your account has explicit access to
+  that share (not just Public access)
+
+To add another user to a share:
+**Settings → Users → Invite** → set the share permission level to **Read/Write**
 
 The helper script can open the portal URL on desktop systems:
 
@@ -193,6 +217,10 @@ In the MyCloud web interface:
 - **Remote access URL unavailable.** Cloud Access requires the NAS to
   reach WD's relay servers. If it fails, check the NAS network settings
   and confirm outbound HTTPS (port 443) is not blocked by your router.
+- **Fewer folders than expected on os5.mycloud.com.** Each share must have
+  Cloud Access turned ON individually in Settings → Shares. Shares with
+  Cloud Access off are invisible to the web portal even if locally mapped.
+  Empty shares are also hidden — add at least one file to confirm visibility.
 
 ## Verification
 

@@ -7,6 +7,7 @@ Usage:
     python nas_mycloud.py test-rw --path U:\
     python nas_mycloud.py map-drive --letter X --unc "\\192.168.1.100\share"
     python nas_mycloud.py fix-drives --drives U Y Z --host 192.168.1.100 --shares U=share1 Y=share2 Z=share3
+    python nas_mycloud.py list-shares --host 192.168.1.100
     python nas_mycloud.py discover --host 192.168.1.100
     python nas_mycloud.py open-portal
 """
@@ -271,6 +272,90 @@ def fix_drives(
 
 
 # ---------------------------------------------------------------------------
+# list-shares
+# ---------------------------------------------------------------------------
+
+def list_shares(host: str, user: str = None, password: str = None) -> dict:
+    """
+    Enumerate SMB shares on the NAS and report which local drive letters
+    (if any) are mapped to each share.
+    """
+    result: dict = {"host": host, "shares": [], "note": ""}
+
+    if _is_windows():
+        # Build share list via net view
+        cmd = ["net", "view", f"\\\\{host}"]
+        if user:
+            # net use a temp connection so net view works with credentials
+            subprocess.run(
+                ["net", "use", f"\\\\{host}\\IPC$", f"/user:{user}", password or ""],
+                capture_output=True, text=True, timeout=15,
+            )
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if proc.returncode != 0:
+                result["error"] = (proc.stderr or proc.stdout).strip()
+                return result
+            raw_shares = [
+                line.split()[0]
+                for line in proc.stdout.splitlines()
+                if line and not line.startswith("-") and line[0].isalpha()
+            ]
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            result["error"] = str(exc)
+            return result
+
+        # Build reverse map: UNC → drive letter from existing mappings
+        unc_to_letter: dict[str, str] = {}
+        try:
+            nu = subprocess.run(["net", "use"], capture_output=True, text=True, timeout=10)
+            for line in nu.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[0].endswith(":"):
+                    unc_to_letter[parts[1].lower()] = parts[0]
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        for share in raw_shares:
+            unc = f"\\\\{host}\\{share}".lower()
+            entry = {"share": share, "unc": f"\\\\{host}\\{share}"}
+            if unc in unc_to_letter:
+                entry["mapped_as"] = unc_to_letter[unc]
+            else:
+                entry["mapped_as"] = None
+            result["shares"].append(entry)
+
+        result["note"] = (
+            "Cloud Access must be ON for each share in Settings → Shares on "
+            "os5.mycloud.com for it to appear in the web portal."
+        )
+
+    else:
+        # Non-Windows: attempt smbclient if available, else fall back to socket probe
+        try:
+            cmd = ["smbclient", "-L", f"//{host}", "-N"]
+            if user:
+                cmd = ["smbclient", "-L", f"//{host}", "-U", user]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15,
+                                  input=(password or "") + "\n")
+            if proc.returncode == 0:
+                for line in proc.stdout.splitlines():
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1] == "Disk":
+                        result["shares"].append({"share": parts[0], "unc": f"//{host}/{parts[0]}"})
+                result["note"] = (
+                    "Cloud Access must be ON for each share in Settings → Shares on "
+                    "os5.mycloud.com for it to appear in the web portal."
+                )
+            else:
+                result["error"] = "smbclient failed — install samba-client or run on Windows"
+        except FileNotFoundError:
+            result["error"] = "smbclient not found; install samba-client or run this command on Windows"
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # open-portal
 # ---------------------------------------------------------------------------
 
@@ -321,6 +406,14 @@ def main(argv: list[str] = None) -> int:
     p_fix.add_argument("--user", help="SMB username (optional)")
     p_fix.add_argument("--password", help="SMB password (optional)")
 
+    p_ls = sub.add_parser(
+        "list-shares",
+        help="List all SMB shares on the NAS and show which drive letters are mapped to them",
+    )
+    p_ls.add_argument("--host", required=True, help="NAS IP or hostname")
+    p_ls.add_argument("--user", help="SMB username (optional)")
+    p_ls.add_argument("--password", help="SMB password (optional)")
+
     p_disc = sub.add_parser("discover", help="Ping NAS and probe SMB port / shares")
     p_disc.add_argument("--host", required=True, help="NAS IP or hostname")
 
@@ -350,6 +443,10 @@ def main(argv: list[str] = None) -> int:
             user=getattr(args, "user", None),
             password=getattr(args, "password", None),
         ))
+    elif args.cmd == "list-shares":
+        _print(list_shares(args.host,
+                           user=getattr(args, "user", None),
+                           password=getattr(args, "password", None)))
     elif args.cmd == "discover":
         _print(discover(args.host))
     elif args.cmd == "open-portal":
