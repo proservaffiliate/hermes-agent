@@ -9,6 +9,7 @@ Usage:
     python nas_mycloud.py fix-drives --drives U Y Z --host 192.168.1.100 --shares U=share1 Y=share2 Z=share3
     python nas_mycloud.py list-shares --host 192.168.1.100
     python nas_mycloud.py discover --host 192.168.1.100
+    python nas_mycloud.py open-drive --drives U Z
     python nas_mycloud.py open-portal
 """
 
@@ -356,6 +357,52 @@ def list_shares(host: str, user: str = None, password: str = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# open-drive
+# ---------------------------------------------------------------------------
+
+def open_drive(drives: list[str]) -> dict:
+    """Open one or more drive letters in the OS file manager."""
+    results = {}
+    for letter in drives:
+        drv = letter.rstrip(":\\").upper()
+
+        if _is_windows():
+            path = f"{drv}:\\"
+            root = Path(path)
+            if not root.exists():
+                results[drv] = {"status": "MISSING", "path": path,
+                                "hint": f"Drive {drv}: is not mapped. Run fix-drives first."}
+                continue
+            try:
+                subprocess.Popen(["explorer.exe", path])
+                results[drv] = {"status": "OPENED", "path": path}
+            except OSError as exc:
+                results[drv] = {"status": "ERROR", "path": path, "reason": str(exc)}
+
+        elif platform.system() == "Darwin":
+            path = f"/Volumes/{drv}"
+            try:
+                subprocess.Popen(["open", path])
+                results[drv] = {"status": "OPENED", "path": path}
+            except OSError as exc:
+                results[drv] = {"status": "ERROR", "path": path, "reason": str(exc)}
+
+        else:
+            # Linux — try xdg-open on /mnt/<letter>
+            path = f"/mnt/{drv.lower()}"
+            try:
+                subprocess.Popen(["xdg-open", path])
+                results[drv] = {"status": "OPENED", "path": path}
+            except FileNotFoundError:
+                results[drv] = {"status": "ERROR", "path": path,
+                                "reason": "xdg-open not found; open the path manually"}
+            except OSError as exc:
+                results[drv] = {"status": "ERROR", "path": path, "reason": str(exc)}
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # open-portal
 # ---------------------------------------------------------------------------
 
@@ -417,6 +464,10 @@ def main(argv: list[str] = None) -> int:
     p_disc = sub.add_parser("discover", help="Ping NAS and probe SMB port / shares")
     p_disc.add_argument("--host", required=True, help="NAS IP or hostname")
 
+    p_open = sub.add_parser("open-drive", help="Open drive letters in the OS file manager")
+    p_open.add_argument("--drives", nargs="+", required=True, metavar="LETTER",
+                        help="Drive letters to open (e.g. U Z)")
+
     sub.add_parser("open-portal", help=f"Open {MYCLOUD_PORTAL} in the default browser")
 
     args = parser.parse_args(argv)
@@ -443,6 +494,8 @@ def main(argv: list[str] = None) -> int:
             user=getattr(args, "user", None),
             password=getattr(args, "password", None),
         ))
+    elif args.cmd == "open-drive":
+        _print(open_drive(args.drives))
     elif args.cmd == "list-shares":
         _print(list_shares(args.host,
                            user=getattr(args, "user", None),
