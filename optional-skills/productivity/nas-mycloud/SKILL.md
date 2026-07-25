@@ -85,6 +85,7 @@ python scripts/nas_mycloud.py discover --host 192.168.1.100
 | Check drives exist | `nas_mycloud.py check-drives --drives U W X Y Z` |
 | Test read/write | `nas_mycloud.py test-rw --path <drive_letter>:\` |
 | Fix specific broken drives | `nas_mycloud.py fix-drives --drives U Y Z --host <IP> --shares U=share1 Y=share2 Z=share3` |
+| Open drives in file manager | `nas_mycloud.py open-drive --drives U Z` |
 | List all NAS shares + drive mapping | `nas_mycloud.py list-shares --host <NAS_IP>` |
 | Map a single drive | `nas_mycloud.py map-drive --letter <L> --unc <\\IP\share>` |
 | Discover NAS shares | `nas_mycloud.py discover --host <NAS_IP>` |
