@@ -46,7 +46,13 @@ auth:
 #   hermes mcp configure graphify
 config_prompts:
   - name: GRAPHIFY_PATH
-    prompt: "Path to the codebase you want to graph (e.g. /home/user/myproject or .)"
+    prompt: >
+      Path to the codebase you want to graph.
+      Examples:
+        Linux/macOS  →  /home/user/myproject  or  /mnt/nas/projects
+        Windows      →  X:\projects           or  \\192.168.1.100\share\projects
+      If your files live on a NAS mapped as X: on Windows, enter the full X:\ path.
+      The directory must be reachable from the machine running Hermes.
     default: "."
     required: true
     secret: false
@@ -71,10 +77,17 @@ post_install: |
   graphify's MCP server reads from graphify-out/graph.json in the directory you
   configured. If no graph exists yet, build one first:
 
-    graphify ${GRAPHIFY_PATH}
+    graphify "${GRAPHIFY_PATH}"
 
   (This is a one-time step; subsequent runs use --update for incremental
   re-extraction on changed files only.)
+
+  NAS / network drive users (Windows X: drive):
+    Make sure the drive is mounted before starting Hermes. If graphify exits
+    immediately, the path may not be reachable — verify with:
+      dir "${GRAPHIFY_PATH}"        (Windows)
+      ls  "${GRAPHIFY_PATH}"        (Linux/macOS)
+    Then re-run the graphify build command above.
 
   The MCP server then exposes graph traversal tools (query, path, explain,
   god-nodes, affected) so Hermes can answer architecture questions without
