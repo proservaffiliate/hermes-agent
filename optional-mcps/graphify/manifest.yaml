@@ -13,19 +13,17 @@ description: >
   without re-reading every file on each turn.
 source: https://github.com/safishamsi/graphify
 
-# graphify ships an MCP stdio server via `graphify <path> --mcp`.
-# The server reads (or builds) graphify-out/graph.json in <path> and exposes
-# graph traversal tools over the MCP stdio protocol.
+# graphify ships a dedicated MCP stdio server binary: `graphify-mcp`.
+# It takes the path to graph.json (produced by `graphify extract <path>`).
 #
 # GRAPHIFY_PATH is substituted at install time with the directory the user
-# wants to graph. It can be changed later by editing the mcp_servers.graphify
-# entry in ~/.hermes/config.yaml.
+# wants to graph. graph.json lives at <path>/graphify-out/graph.json.
+# Change later by editing mcp_servers.graphify in ~/.hermes/config.yaml.
 transport:
   type: stdio
-  command: graphify
+  command: graphify-mcp
   args:
-    - "${GRAPHIFY_PATH}"
-    - "--mcp"
+    - "${GRAPHIFY_PATH}/graphify-out/graph.json"
 
 # graphify is a standalone pip package — no repo to clone.
 # Install before running `hermes mcp install official/graphify`:
@@ -49,7 +47,7 @@ config_prompts:
       e.g.  \\192.168.12.248\projects  or  \\192.168.12.248\code
       If the drive is mapped as X: on Windows you can also enter  X:\  or a subfolder.
       The path must be reachable from the machine running Hermes.
-    default: "\\\\192.168.12.248"
+    default: "\\\\192.168.12.248\\projects"
     required: true
     secret: false
 
@@ -73,20 +71,20 @@ post_install: |
   Prerequisites (run once before starting Hermes):
     pip install --upgrade graphifyy
 
-  graphify's MCP server reads from graphify-out/graph.json in the directory you
+  graphify's MCP server reads graphify-out/graph.json in the directory you
   configured. If no graph exists yet, build one first:
 
-    graphify "${GRAPHIFY_PATH}"
+    graphify extract "${GRAPHIFY_PATH}"
 
-  (This is a one-time step; subsequent runs use --update for incremental
-  re-extraction on changed files only.)
+  (This is a one-time step; subsequent runs use `graphify update "${GRAPHIFY_PATH}"` for
+  incremental re-extraction on changed files only.)
 
   NAS / network drive users (Windows X: drive):
-    Make sure the drive is mounted before starting Hermes. If graphify exits
-    immediately, the path may not be reachable — verify with:
-      dir "${GRAPHIFY_PATH}"        (Windows)
-      ls  "${GRAPHIFY_PATH}"        (Linux/macOS)
-    Then re-run the graphify build command above.
+    Make sure the drive is mounted before starting Hermes. If graphify-mcp exits
+    immediately, the graph.json may not exist yet — check:
+      dir "${GRAPHIFY_PATH}\graphify-out\graph.json"   (Windows)
+      ls  "${GRAPHIFY_PATH}/graphify-out/graph.json"   (Linux/macOS)
+    Then re-run `graphify extract "${GRAPHIFY_PATH}"` above.
 
   The MCP server then exposes graph traversal tools (query, path, explain,
   god-nodes, affected) so Hermes can answer architecture questions without
