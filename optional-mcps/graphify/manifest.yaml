@@ -47,7 +47,7 @@ config_prompts:
       e.g.  \\192.168.12.248\projects  or  \\192.168.12.248\code
       If the drive is mapped as X: on Windows you can also enter  X:\  or a subfolder.
       The path must be reachable from the machine running Hermes.
-    default: "\\\\192.168.12.248\\projects"
+    default: "C:\\Nas_hub\\CLaude\\Graphify"
     required: true
     secret: false
 
