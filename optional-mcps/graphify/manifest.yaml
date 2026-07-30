@@ -27,13 +27,10 @@ transport:
     - "${GRAPHIFY_PATH}"
     - "--mcp"
 
-# graphify is installed as a standalone CLI via pip/uvx; there is no repo to
-# clone. The bootstrap step installs the `graphifyy` package (pip package name
-# differs from the CLI command, which is `graphify`).
-install:
-  type: bootstrap
-  bootstrap:
-    - "pip install --upgrade graphifyy"
+# graphify is a standalone pip package — no repo to clone.
+# Install before running `hermes mcp install official/graphify`:
+#   pip install --upgrade graphifyy
+# (The pip package is named `graphifyy`; the CLI command is `graphify`.)
 
 # No API key needed for the MCP server itself. The underlying LLM calls
 # (extraction, community labelling) use whatever key the user already has set
@@ -73,6 +70,9 @@ tools:
     - graph_cluster
 
 post_install: |
+  Prerequisites (run once before starting Hermes):
+    pip install --upgrade graphifyy
+
   graphify's MCP server reads from graphify-out/graph.json in the directory you
   configured. If no graph exists yet, build one first:
 
