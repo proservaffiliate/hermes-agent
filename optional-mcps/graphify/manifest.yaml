@@ -42,12 +42,11 @@ auth:
 config_prompts:
   - name: GRAPHIFY_PATH
     prompt: >
-      Path to the codebase you want to graph.
-      Your NAS is at \\192.168.12.248 — enter the full UNC path including share name,
-      e.g.  \\192.168.12.248\projects  or  \\192.168.12.248\code
-      If the drive is mapped as X: on Windows you can also enter  X:\  or a subfolder.
+      Path to the directory you want to graph.
+      NAS shares are reachable as UNC paths, e.g. \\192.168.12.248\Company AI Files
+      On Windows, a mapped drive letter works too — X:\ or any subfolder of it.
       The path must be reachable from the machine running Hermes.
-    default: "C:\\Nas_hub\\CLaude\\Graphify"
+    default: "X:\\"
     required: true
     secret: false
 
