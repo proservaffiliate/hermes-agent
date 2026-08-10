@@ -688,6 +688,30 @@ def test_oneshot_exit_code_when_failed_without_response(monkeypatch):
     assert run_oneshot("hi") == 2
 
 
+def test_oneshot_surfaces_error_detail_when_failed_without_response(monkeypatch, capsys):
+    # Regression: a failed/partial turn with no final_response text used to
+    # exit 2 with zero output on both streams, discarding result["error"]
+    # entirely — the worst failure mode for a mode documented as "intended
+    # for scripts / pipes" (no diagnostic to log or show the caller).
+    from hermes_cli.oneshot import run_oneshot
+
+    monkeypatch.setattr(
+        "hermes_cli.oneshot._run_agent",
+        lambda *_a, **_k: (
+            "",
+            {
+                "failed": True,
+                "partial": False,
+                "error": "HTTP 400: Your credit balance is too low to access the Anthropic API.",
+            },
+        ),
+    )
+    assert run_oneshot("hi") == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "credit balance is too low" in captured.err
+
+
 def test_oneshot_exit_code_zero_when_failed_with_error_text(monkeypatch, capsys):
     from hermes_cli.oneshot import run_oneshot
 
