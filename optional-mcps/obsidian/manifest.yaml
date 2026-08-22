@@ -1,0 +1,74 @@
+# Nous-approved MCP catalog entry.
+# Presence in this directory = approval. Merged via PR review.
+#
+# Schema version 1.
+manifest_version: 1
+
+name: obsidian
+description: >
+  Read, search, create, and edit notes in an Obsidian vault via the
+  Obsidian Local REST API plugin. Hermes can query, append, and create
+  notes directly, making the vault a live knowledge base alongside
+  Graphify's knowledge graph.
+source: https://github.com/coddingtonbear/obsidian-local-rest-api
+
+# Obsidian Local REST API plugin runs an HTTPS server on localhost.
+# Install the plugin in Obsidian: Settings → Community plugins → Local REST API.
+# The API key is shown in the plugin settings.
+transport:
+  type: stdio
+  command: npx
+  args:
+    - "-y"
+    - "mcp-obsidian"
+    - "--api-key"
+    - "${OBSIDIAN_API_KEY}"
+    - "--host"
+    - "${OBSIDIAN_HOST}"
+    - "--port"
+    - "${OBSIDIAN_PORT}"
+
+# No git clone needed — npx pulls mcp-obsidian on first run.
+# Prerequisite: Obsidian must be open with the Local REST API plugin enabled.
+
+auth:
+  type: api_key
+  env:
+    - name: OBSIDIAN_API_KEY
+      prompt: "Obsidian Local REST API key (from Obsidian Settings → Community Plugins → Local REST API)"
+      required: true
+      secret: true
+    - name: OBSIDIAN_HOST
+      prompt: "Obsidian REST API host"
+      default: "127.0.0.1"
+      required: true
+      secret: false
+    - name: OBSIDIAN_PORT
+      prompt: "Obsidian REST API port"
+      default: "27123"
+      required: true
+      secret: false
+
+tools:
+  default_enabled:
+    - get_active_file
+    - list_notes
+    - get_note
+    - search_notes
+    - create_note
+    - append_to_note
+    - update_note
+  default_disabled:
+    - delete_note
+
+post_install: |
+  Prerequisites:
+    1. Open Obsidian
+    2. Settings → Community Plugins → Browse → search "Local REST API" → Install → Enable
+    3. Copy the API key shown in the plugin settings
+
+  Vault path for Graphify sync — add to ~/.hermes/.env:
+    OBSIDIAN_VAULT_PATH=X:\<your-vault-folder>
+
+  Start a new Hermes session to load Obsidian tools.
+  Hermes can then read, search, create, and append notes directly in your vault.

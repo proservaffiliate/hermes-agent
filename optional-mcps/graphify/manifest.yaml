@@ -1,0 +1,103 @@
+# Nous-approved MCP catalog entry.
+# Presence in this directory = approval. Merged via PR review.
+#
+# Schema version 1.
+manifest_version: 1
+
+name: graphify
+description: >
+  Turn any codebase, document set, or media folder into a queryable knowledge
+  graph (god nodes, community detection, BFS/DFS query, shortest-path). Exposes
+  graphify's full graph API — query, path, explain, affected, god-nodes — as MCP
+  tools so Hermes can answer architecture questions from a persistent graph
+  without re-reading every file on each turn.
+source: https://github.com/safishamsi/graphify
+
+# graphify ships a dedicated MCP stdio server binary: `graphify-mcp`.
+# It takes the path to graph.json (produced by `graphify extract <path>`).
+#
+# GRAPHIFY_PATH is substituted at install time with the directory the user
+# wants to graph. graph.json lives at <path>/graphify-out/graph.json.
+# Change later by editing mcp_servers.graphify in ~/.hermes/config.yaml.
+transport:
+  type: stdio
+  command: graphify-mcp
+  args:
+    - "${GRAPHIFY_PATH}/graphify-out/graph.json"
+
+# graphify is a standalone pip package — no repo to clone.
+# Install before running `hermes mcp install official/graphify`:
+#   pip install --upgrade "graphifyy[mcp]"
+# The [mcp] extra is REQUIRED — plain `pip install graphifyy` omits the MCP
+# dependencies and graphify-mcp exits with ImportError on startup.
+# (The pip package is named `graphifyy`; the CLI command is `graphify`.)
+
+# No API key needed for the MCP server itself. The underlying LLM calls
+# (extraction, community labelling) use whatever key the user already has set
+# in their environment (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.).
+auth:
+  type: none
+
+# Prompt for the target directory at install time so the transport arg is
+# substituted correctly. The user can re-configure with:
+#   hermes mcp configure graphify
+config_prompts:
+  - name: GRAPHIFY_PATH
+    prompt: >
+      Path to the directory you want to graph.
+      NAS shares are reachable as UNC paths, e.g. \\192.168.12.248\Company AI Files
+      On Windows, a mapped drive letter works too — X:\ or any subfolder of it.
+      The path must be reachable from the machine running Hermes.
+    default: "X:\\"
+    required: true
+    secret: false
+
+# Tool selection at install time.
+# Every graphify-mcp tool is read-only — the server only reads graph.json and
+# never mutates it. Re-extraction stays on the CLI (`graphify extract/update`).
+#
+# The server also exposes list_prs / get_pr_impact / triage_prs, which need PR
+# metadata in the graph (populated only when extracting a git repo). They are
+# left out of default_enabled because they return nothing useful for a document
+# corpus; enable them with `hermes mcp configure graphify` on a repo graph.
+tools:
+  default_enabled:
+    - query_graph
+    - get_node
+    - get_neighbors
+    - get_community
+    - god_nodes
+    - graph_stats
+    - shortest_path
+
+post_install: |
+  Prerequisites (run once before starting Hermes):
+    pip install --upgrade "graphifyy[mcp]"
+
+  The [mcp] extra is required. Without it graphify-mcp exits immediately with
+  ImportError: mcp not installed.
+
+  graphify's MCP server reads graphify-out/graph.json in the directory you
+  configured. If no graph exists yet, build one first:
+
+    graphify extract "${GRAPHIFY_PATH}"
+
+  (This is a one-time step; subsequent runs use `graphify update "${GRAPHIFY_PATH}"` for
+  incremental re-extraction on changed files only.)
+
+  NAS / network drive users (Windows X: drive):
+    Make sure the drive is mounted before starting Hermes. If graphify-mcp exits
+    immediately, the graph.json may not exist yet — check:
+      dir "${GRAPHIFY_PATH}\graphify-out\graph.json"   (Windows)
+      ls  "${GRAPHIFY_PATH}/graphify-out/graph.json"   (Linux/macOS)
+    Then re-run `graphify extract "${GRAPHIFY_PATH}"` above.
+
+  The MCP server then exposes read-only graph traversal tools — query_graph,
+  get_node, get_neighbors, get_community, god_nodes, graph_stats,
+  shortest_path — so Hermes can answer questions from the graph without
+  re-reading raw source files each turn.
+
+  To graph a different directory, reconfigure with:
+    hermes mcp configure graphify
+
+  Start a new Hermes session to load the graphify tools.
