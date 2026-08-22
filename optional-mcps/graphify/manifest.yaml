@@ -27,7 +27,9 @@ transport:
 
 # graphify is a standalone pip package — no repo to clone.
 # Install before running `hermes mcp install official/graphify`:
-#   pip install --upgrade graphifyy
+#   pip install --upgrade "graphifyy[mcp]"
+# The [mcp] extra is REQUIRED — plain `pip install graphifyy` omits the MCP
+# dependencies and graphify-mcp exits with ImportError on startup.
 # (The pip package is named `graphifyy`; the CLI command is `graphify`.)
 
 # No API key needed for the MCP server itself. The underlying LLM calls
@@ -51,24 +53,29 @@ config_prompts:
     secret: false
 
 # Tool selection at install time.
-# graph_query / graph_path / graph_explain are the read-only traversal tools
-# (safe by default). extract and update trigger LLM-backed re-extraction
-# (mutating — opt-in).
+# Every graphify-mcp tool is read-only — the server only reads graph.json and
+# never mutates it. Re-extraction stays on the CLI (`graphify extract/update`).
+#
+# The server also exposes list_prs / get_pr_impact / triage_prs, which need PR
+# metadata in the graph (populated only when extracting a git repo). They are
+# left out of default_enabled because they return nothing useful for a document
+# corpus; enable them with `hermes mcp configure graphify` on a repo graph.
 tools:
   default_enabled:
-    - graph_query
-    - graph_path
-    - graph_explain
-    - graph_god_nodes
-    - graph_affected
-  default_disabled:
-    - graph_extract
-    - graph_update
-    - graph_cluster
+    - query_graph
+    - get_node
+    - get_neighbors
+    - get_community
+    - god_nodes
+    - graph_stats
+    - shortest_path
 
 post_install: |
   Prerequisites (run once before starting Hermes):
-    pip install --upgrade graphifyy
+    pip install --upgrade "graphifyy[mcp]"
+
+  The [mcp] extra is required. Without it graphify-mcp exits immediately with
+  ImportError: mcp not installed.
 
   graphify's MCP server reads graphify-out/graph.json in the directory you
   configured. If no graph exists yet, build one first:
@@ -85,8 +92,9 @@ post_install: |
       ls  "${GRAPHIFY_PATH}/graphify-out/graph.json"   (Linux/macOS)
     Then re-run `graphify extract "${GRAPHIFY_PATH}"` above.
 
-  The MCP server then exposes graph traversal tools (query, path, explain,
-  god-nodes, affected) so Hermes can answer architecture questions without
+  The MCP server then exposes read-only graph traversal tools — query_graph,
+  get_node, get_neighbors, get_community, god_nodes, graph_stats,
+  shortest_path — so Hermes can answer questions from the graph without
   re-reading raw source files each turn.
 
   To graph a different directory, reconfigure with:
