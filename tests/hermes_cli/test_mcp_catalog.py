@@ -143,6 +143,24 @@ class TestManifestParsing:
         assert e.auth.env[1].required is False
         assert e.auth.env[1].secret is False
 
+    def test_env_var_header_field_parsed(self, catalog_dir):
+        body = _basic_manifest(
+            transport={"type": "http", "url": "https://mcp.example.com/mcp"},
+            auth={
+                "type": "api_key",
+                "env": [
+                    {"name": "MY_KEY", "prompt": "key", "secret": True, "header": "x-my-key"},
+                    {"name": "OTHER", "prompt": "other", "secret": False},
+                ],
+            },
+        )
+        _write_manifest(catalog_dir, "demo", body)
+        from hermes_cli.mcp_catalog import list_catalog
+
+        e = list_catalog()[0]
+        assert e.auth.env[0].header == "x-my-key"
+        assert e.auth.env[1].header is None
+
     def test_install_block(self, catalog_dir):
         body = _basic_manifest(
             install={
@@ -306,6 +324,69 @@ class TestInstall:
         server = load_config()["mcp_servers"]["demo"]
         assert server["url"] == "https://mcp.example.com/sse"
         assert server["auth"] == "oauth"
+
+    def test_install_http_api_key_with_header_writes_headers(self, catalog_dir, monkeypatch):
+        """HTTP + api_key entries that declare a header name get a 'headers'
+        block written to config with ${ENV_VAR} placeholders.
+
+        Note: load_config() expands ${VAR} placeholders from os.environ, so the
+        assertion checks the resolved value (which equals the saved API key).
+        The raw YAML stores the placeholder — this is verified separately via
+        the config.yaml text.
+        """
+        body = _basic_manifest(
+            transport={"type": "http", "url": "https://mcp.example.com/mcp"},
+            auth={
+                "type": "api_key",
+                "env": [
+                    {"name": "MY_KEY", "prompt": "key", "secret": True, "header": "x-api-key"},
+                ],
+            },
+        )
+        _write_manifest(catalog_dir, "demo", body)
+
+        from hermes_cli import mcp_catalog
+        monkeypatch.setattr(mcp_catalog, "_prompt_input", lambda *a, **kw: "my-secret")
+
+        from hermes_cli.mcp_catalog import install_entry
+        from hermes_cli.config import load_config, get_config_path
+
+        install_entry(_entry("demo"), enable=True)
+
+        # load_config() resolves ${MY_KEY} → "my-secret" (from os.environ set by save_env_value)
+        server = load_config()["mcp_servers"]["demo"]
+        assert server["url"] == "https://mcp.example.com/mcp"
+        assert "x-api-key" in server["headers"]
+        assert server["headers"]["x-api-key"] == "my-secret"
+
+        # Raw YAML must store the placeholder, not the secret in plain text
+        raw_yaml = get_config_path().read_text()
+        assert "${MY_KEY}" in raw_yaml
+        assert "my-secret" not in raw_yaml
+
+    def test_install_http_api_key_without_header_no_headers_block(
+        self, catalog_dir, monkeypatch
+    ):
+        """HTTP + api_key entries with no header field don't emit a headers block."""
+        body = _basic_manifest(
+            transport={"type": "http", "url": "https://mcp.example.com/mcp"},
+            auth={
+                "type": "api_key",
+                "env": [{"name": "MY_KEY", "prompt": "key", "secret": True}],
+            },
+        )
+        _write_manifest(catalog_dir, "demo", body)
+
+        from hermes_cli import mcp_catalog
+        monkeypatch.setattr(mcp_catalog, "_prompt_input", lambda *a, **kw: "my-secret")
+
+        from hermes_cli.mcp_catalog import install_entry
+        from hermes_cli.config import load_config
+
+        install_entry(_entry("demo"), enable=True)
+
+        server = load_config()["mcp_servers"]["demo"]
+        assert "headers" not in server
 
     def test_install_required_env_missing_raises(self, catalog_dir, monkeypatch):
         body = _basic_manifest(
