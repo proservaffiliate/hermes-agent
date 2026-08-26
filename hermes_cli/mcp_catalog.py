@@ -116,6 +116,7 @@ class CatalogEntry:
     source: str
     transport: TransportSpec
     auth: AuthSpec
+    config_prompts: List[EnvVarSpec] = field(default_factory=list)
     tools: ToolsSpec = field(default_factory=ToolsSpec)
     install: Optional[InstallSpec] = None
     post_install: str = ""
@@ -220,6 +221,11 @@ def _parse_manifest(path: Path) -> CatalogEntry:
         env_var=auth_raw.get("env_var"),
     )
 
+    config_prompts_raw = data.get("config_prompts") or []
+    if not isinstance(config_prompts_raw, list):
+        raise CatalogError(f"{path}: config_prompts must be a list")
+    config_prompts = [_parse_env_spec(e) for e in config_prompts_raw]
+
     tools_raw = data.get("tools") or {}
     if not isinstance(tools_raw, dict):
         raise CatalogError(f"{path}: 'tools' must be a mapping")
@@ -261,6 +267,7 @@ def _parse_manifest(path: Path) -> CatalogEntry:
         source=source,
         transport=transport,
         auth=auth,
+        config_prompts=config_prompts,
         tools=tools_spec,
         install=install,
         post_install=str(data.get("post_install") or ""),
@@ -712,7 +719,7 @@ def install_entry(entry: CatalogEntry, *, enable: bool = True) -> None:
     if entry.install is not None:
         install_dir = _do_git_install(entry)
 
-    # Auth
+    # Auth and non-secret configuration prompts
     if entry.auth.type == "api_key":
         print()
         print(color("  Configure credentials:", Colors.CYAN))
@@ -736,6 +743,10 @@ def install_entry(entry: CatalogEntry, *, enable: bool = True) -> None:
                 Colors.DIM,
             ))
     # auth.type == "none": nothing to do.
+    # config_prompts are independent of authentication and are used by
+    # transports such as Graphify that need a user path but no credentials.
+    if entry.config_prompts:
+        _prompt_env_vars(entry.config_prompts)
 
     # ── Preserve any prior user tool selection across reinstalls ────────
     # Reading BEFORE we overwrite the entry below so a reinstall pre-checks
