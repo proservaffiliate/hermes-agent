@@ -19,7 +19,7 @@ async def main():
 
             tools = (await s.list_tools()).tools
             print(f"list_tools    -> {len(tools)} tools: {', '.join(t.name for t in tools)}")
-            assert len(tools) == 7
+            assert len(tools) == 10
 
             st = await s.call_tool("council_status", {})
             data = json.loads(st.content[0].text)
@@ -67,6 +67,11 @@ async def main():
             path = json.loads(rd.content[0].text)["path"]
             print(f"record_decision-> {path}")
             assert os.path.exists(path)
+
+            ur = await s.call_tool("usage_report", {})
+            urd = json.loads(ur.content[0].text)
+            print(f"usage_report  -> {urd['entries']} entries, priced ${urd['priced_total_usd']}, caveat present={'not a provider bill' in urd['caveat']}")
+            assert "not a provider bill" in urd["caveat"]
 
             ls = await s.call_tool("list_council_sessions", {})
             rows = json.loads(ls.content[0].text)["sessions"]

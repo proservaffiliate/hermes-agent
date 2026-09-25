@@ -21,6 +21,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 import council_core as core
+import council_ledger as ledger
 import council_providers as providers
 
 import functools
@@ -143,8 +144,17 @@ def dispatch_seat(
                         "to manual paste, or fix and retry."}
     core.record_response(session_id, seat, result["text"],
                          model=f"{prov}:{result['model']}")
+    usage = ledger.extract_usage(prov, result.get("raw") or {})
+    entry = ledger.record(
+        provider=prov, model=result["model"],
+        tokens_in=usage["input"], tokens_out=usage["output"],
+        seat=seat, session_id=session_id, source="dispatch")
     return {"status": "recorded", "seat": seat, "provider": prov,
-            "model": result["model"], "response": result["text"]}
+            "model": result["model"], "response": result["text"],
+            "usage": {"tokens_in": entry["tokens_in"],
+                      "tokens_out": entry["tokens_out"],
+                      "cost_usd": entry["cost_usd"],
+                      "cost_status": entry["cost_status"]}}
 
 
 @mcp.tool()
@@ -209,6 +219,54 @@ def list_council_sessions() -> dict[str, Any]:
     """Past and open council sessions, newest first, with outcomes and review
     dates. Sessions reading OPEN were convened but never decided."""
     return {"sessions": core.list_sessions()}
+
+
+@mcp.tool()
+@expected_errors
+def usage_report(since: str = "") -> dict[str, Any]:
+    """Token and cost usage across every model the council has called.
+
+    since: optional ISO timestamp lower bound, e.g. '2026-09-01'.
+
+    Covers only calls made through this layer plus fixed costs recorded by
+    hand. It is not a provider bill. Calls whose model has no rate in
+    pricing.json are counted as UNPRICED and excluded from the total rather
+    than estimated — check unpriced_models and fill those rates in.
+    """
+    return ledger.report(since=since)
+
+
+@mcp.tool()
+@expected_errors
+def record_fixed_cost(vendor: str, amount_usd: float, period: str,
+                      note: str = "") -> dict[str, Any]:
+    """Record a flat subscription charge that token counting cannot see.
+
+    For this operation the subscriptions (Claude, ChatGPT, Gemini, Blotato)
+    are most of the real monthly spend, so a usage report without them
+    understates the true cost badly.
+
+    period: the billing period, e.g. '2026-09'.
+    """
+    return ledger.add_fixed_cost(vendor=vendor, amount_usd=amount_usd,
+                                 period=period, note=note)
+
+
+@mcp.tool()
+@expected_errors
+def record_external_usage(provider: str, model: str, tokens_in: int,
+                          tokens_out: int, seat: str = "",
+                          session_id: str = "", note: str = "") -> dict[str, Any]:
+    """Record token usage for a model this server did not call itself — one
+    reached through another client, or a seat answered by hand.
+
+    Report only counts a provider actually gave you. Leave a field at 0 if
+    unknown rather than estimating; an invented token count corrupts the only
+    honest cost signal in the system.
+    """
+    return ledger.record(provider=provider, model=model, tokens_in=tokens_in,
+                         tokens_out=tokens_out, seat=seat,
+                         session_id=session_id, source="external", note=note)
 
 
 if __name__ == "__main__":

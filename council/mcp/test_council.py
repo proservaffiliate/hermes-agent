@@ -160,12 +160,13 @@ except ValueError as e:
 # 11 — MCP surface
 print("\nMCP surface")
 tools = asyncio.run(srv.mcp.list_tools())
-check("seven tools exposed", len(tools)==7, str(len(tools)))
+check("ten tools exposed", len(tools)==10, str(len(tools)))
 check("every tool documented", all((t.description or "").strip() for t in tools))
 names = {t.name for t in tools}
 check("expected tool names", names == {
     "council_status","convene_council","dispatch_seat","record_seat_response",
-    "cross_examine","record_decision","list_council_sessions"}, str(names))
+    "cross_examine","record_decision","list_council_sessions",
+    "usage_report","record_fixed_cost","record_external_usage"}, str(names))
 
 print(f"\n{'='*52}\n  {P} passed, {F} failed\n{'='*52}")
 sys.exit(1 if F else 0)

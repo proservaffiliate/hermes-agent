@@ -187,4 +187,5 @@ def dispatch(provider: str, prompt: str) -> dict[str, Any]:
 
     if not (text or "").strip():
         raise ProviderError("provider returned an empty response")
-    return {"provider": provider, "model": model, "text": text.strip()}
+    return {"provider": provider, "model": model, "text": text.strip(),
+            "raw": data}
