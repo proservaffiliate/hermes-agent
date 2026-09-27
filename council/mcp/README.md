@@ -83,6 +83,50 @@ were not verified against a live API.
 
 ---
 
+## Wiring it into Hermes
+
+Hermes can convene the council itself — on a cron schedule, from Telegram, or
+in the TUI. One command from the repo root:
+
+```bash
+bash council/wire-hermes.sh
+```
+
+It installs the `mcp>=2` dependency, verifies the server imports, registers it
+with `hermes mcp add`, installs the `council-protocol` skill so Hermes knows
+when to convene and who decides, and runs `hermes mcp test council`. Re-running
+it will not create a duplicate.
+
+Verify:
+
+```bash
+hermes mcp list          # 'council' present
+hermes mcp test council  # connection OK
+```
+
+**No credentials are passed during wiring, deliberately.** The server reads
+provider keys from the environment at call time, so whatever the keeper puts in
+Hermes's environment is what the seats use. Putting a key in the wiring would
+fork the source of truth.
+
+One gotcha if you register it by hand: `hermes mcp add` takes `--args` as
+`argparse.REMAINDER`, so it must be the **last** option on the line — anything
+after it is swallowed as command argv.
+
+To register declaratively instead, the equivalent block in `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  council:
+    command: /usr/bin/python3
+    args: [/ABSOLUTE/PATH/TO/council/mcp/council_mcp.py]
+    env:
+      COUNCIL_HOME: /ABSOLUTE/PATH/TO/council-records
+      PYTHONPATH: /ABSOLUTE/PATH/TO/council/mcp
+```
+
+---
+
 ## Running a council
 
 1. `council_status` — see which seats will dispatch and which need paste
