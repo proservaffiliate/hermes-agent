@@ -1141,6 +1141,17 @@ must be **cache-aware**: default to deferred invalidation (change takes
 effect next session), with an opt-in `--now` flag for immediate
 invalidation. See `/skills install --now` for the canonical pattern.
 
+### One Branch Per Change
+
+Push every change to its own descriptive branch — never reuse a branch across
+pull requests. Name it for the work (`claude/council-ledger-export`), not for
+the session or the agent that made it.
+
+Reusing one long-lived branch stacks unrelated work into a single PR, makes the
+description go stale as commits land, and leaves nothing meaningful to read in
+the branch list. A merged branch is finished: start the next change from
+`main`, not from it.
+
 ### Background Process Notifications (Gateway)
 
 When `terminal(background=true, notify_on_complete=true)` is used, the gateway runs a watcher that
